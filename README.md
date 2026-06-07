@@ -1,0 +1,80 @@
+# Spectral Viewer v0.1.0
+
+A small, native desktop image viewer written in Rust. It focuses on opening local images quickly and browsing a folder without editing tools.
+
+## Features
+
+- Open images from the windows context menu or application.
+- Browse supported images in the same folder
+- Smooth cursor-centered mouse-wheel zoom and click-drag panning
+- Fit-to-window and 100% views
+- Rotate and horizontal/vertical flip without modifying the file.
+- Fullscreen mode
+- Clear file name, folder position, zoom level, image metadata, and load errors
+- Background image decoding, adjacent-image preloading, and a bounded image cache
+- Currently supports only Windows
+
+Supported by default: BMP, GIF, ICO, JPEG, PNG/PNM, QOI, TIFF, and WebP.
+
+## Build and run
+
+Install the current stable Rust toolchain from <https://rustup.rs/>, then:
+
+```sh
+cargo run --release
+```
+
+Open a specific image:
+
+```sh
+cargo run --release -- path/to/image.png
+```
+
+Build a standalone optimized executable:
+
+```sh
+cargo build --release
+```
+
+The executable is written to `target/release/spectral-viewer` (`spectral-viewer.exe` on Windows).
+
+## Build the Windows installer
+
+Install [Inno Setup 6](https://jrsoftware.org/isinfo.php), then run:
+
+```powershell
+.\scripts\build-installer.ps1
+```
+
+The installer is written to `dist\SpectralViewer-Setup-0.1.0.exe`. It installs per user without requiring administrator access. Spectral Viewer is registered as an available **Open with** and Default Apps candidate for supported image types without changing the user's defaults. During installation, users can optionally add a separate **Open with Spectral Viewer** context-menu command. The final installer page includes a checkbox to launch Spectral Viewer.
+
+The Windows application and installer icon is sourced from `assets\icon.ico`.
+
+Verify the install, context-menu task, and uninstall behavior:
+
+```powershell
+.\scripts\test-installer.ps1
+```
+
+## Controls
+
+| Action | Control |
+| --- | --- |
+| Open image | `Ctrl+O` |
+| Previous / next | `Left` / `Right` or `Page Up` / `Page Down` |
+| First / last | `Home` / `End` |
+| Zoom | Mouse wheel |
+| Pan | Click and drag |
+| Fit to window | `F` or double-click |
+| Actual size | `Ctrl+0` |
+| Rotate clockwise | `R` |
+| Flip horizontally / vertically | `H` / `V` |
+| Toggle fullscreen | `F11` |
+
+## Test
+
+```sh
+cargo test
+```
+
+AVIF, network loading, editing, update checks, and platform-specific integrations are intentionally outside the default build.
