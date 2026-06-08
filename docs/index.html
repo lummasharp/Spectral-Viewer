@@ -28,12 +28,12 @@
     <main class="page">
       <header class="hero">
         <a class="brand" href="https://github.com/lummasharp/Spectral-Viewer">
-          <img src="assets/icon.ico" alt="" width="42" height="42" />
+          <img src="assets/icon.ico" alt="" width="30" height="30" />
           <span>Spectral Viewer</span>
         </a>
         <h1>A lightweight and minimal image viewer.</h1>
         <p class="lede">
-          A recreation inspired by
+          A recreation from
           <a href="https://github.com/ArturKovacs/emulsion">Emulsion</a>,
           after the original project was discontinued.
         </p>
@@ -45,12 +45,7 @@
         </p>
       </header>
 
-      <nav class="nav" aria-label="Page sections">
-        <a href="#overview">Overview</a>
-        <a href="#showcase">Showcase</a>
-        <a href="#details">Details</a>
-        <a href="#download">Download</a>
-      </nav>
+      <hr class="divider" />
 
       <section id="overview" class="section">
         <h2>Overview</h2>
@@ -59,8 +54,15 @@
           a folder without editor-style clutter.
         </p>
         <div class="media-block">
-          <div class="media-placeholder">Main showcase video placeholder</div>
-          <p>Open an image, zoom, pan, switch scaling, and enter fullscreen.</p>
+          <video
+            class="media-video"
+            src="media/main.mp4"
+            autoplay
+            muted
+            loop
+            playsinline
+          ></video>
+          <p>Open an image, zoom, pan, switch scaling, and even enter fullscreen.</p>
         </div>
       </section>
 
@@ -68,30 +70,49 @@
         <h2>Showcase</h2>
 
         <div class="feature">
-          <h3>Fast</h3>
+          <h3>Pixel Art Friendly</h3>
           <p>
-            Displays large images quickly and stays light on resources when
-            idle.
+            Switch between smooth scaling and nearest-neighbor scaling.
           </p>
-          <div class="media-placeholder short">Video placeholder</div>
+          <video
+            class="media-video short"
+            src="media/pixel.mp4"
+            autoplay
+            muted
+            loop
+            playsinline
+          ></video>
+        </div>
+
+        <div class="feature">
+          <h3>Rotate and Flip</h3>
+          <p>
+            Rotate the image and flip it horizontally or vertically without
+            changing the file.
+          </p>
+          <video
+            class="media-video short"
+            src="media/rotate.mp4"
+            autoplay
+            muted
+            loop
+            playsinline
+          ></video>
         </div>
 
         <div class="feature">
           <h3>Cursor Anchored Zoom</h3>
           <p>
-            Zooms toward the area under the cursor, so detailed inspection feels
-            direct.
+           Zooms towards the cursor position, so you can easily zoom into a specific area.
           </p>
-          <div class="media-placeholder short">Video placeholder</div>
-        </div>
-
-        <div class="feature">
-          <h3>Pixel Art Friendly</h3>
-          <p>
-            Switches between smooth scaling and nearest-neighbor scaling when
-            you want real pixels.
-          </p>
-          <div class="media-placeholder short">Video placeholder</div>
+          <video
+            class="media-video short"
+            src="media/anchor.mp4"
+            autoplay
+            muted
+            loop
+            playsinline
+          ></video>
         </div>
       </section>
 
@@ -102,8 +123,7 @@
           PNG, PNM, QOI, SVG, TGA, TIFF, and WebP.
         </p>
         <p>
-          Automatic GitHub release checks are built in, and the installer can
-          relaunch the app after updating.
+          Automatically updates to the latest GitHub release.
         </p>
       </section>
 
