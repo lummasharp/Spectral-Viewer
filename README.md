@@ -1,5 +1,7 @@
 # Spectral Viewer v0.3.1
 
+![Spectral Viewer's UI](https://github.com/lummasharp/Spectral-Viewer/blob/main/docs/media/ui.png)
+
 A small, native desktop image viewer written in Rust. It focuses on opening local images quickly and browsing a folder without editing tools.
 
 ## Features
