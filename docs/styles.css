@@ -107,18 +107,22 @@ h1 {
   margin-top: 14px;
 }
 
+.media-block {
+  max-width: 720px;
+}
+
+.feature {
+  max-width: 560px;
+}
+
 .media-video {
   display: block;
   width: 100%;
-  min-height: 280px;
+  aspect-ratio: 16 / 9;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: linear-gradient(135deg, var(--sky-soft), #ffffff 55%, #edf9fc);
   object-fit: cover;
-}
-
-.media-video.short {
-  min-height: 210px;
 }
 
 .media-block {
@@ -162,8 +166,8 @@ h1 {
     align-items: flex-start;
   }
 
-  .media-video,
-  .media-video.short {
-    min-height: 180px;
+  .media-block,
+  .feature {
+    max-width: none;
   }
 }
