@@ -1,6 +1,6 @@
 [package]
 name = "spectral-viewer"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "A fast, minimal desktop image viewer"
 license = "MIT"
@@ -8,7 +8,9 @@ license = "MIT"
 [dependencies]
 eframe = { version = "0.34", default-features = false, features = ["default_fonts", "glow", "persistence", "wayland", "x11"] }
 image = { version = "0.25", default-features = false, features = ["bmp", "gif", "ico", "jpeg", "png", "pnm", "qoi", "tiff", "webp"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 rfd = "0.17"
+semver = "1"
 serde = { version = "1", features = ["derive"] }
 
 [build-dependencies]

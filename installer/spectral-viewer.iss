@@ -1,5 +1,5 @@
 #define AppName "Spectral Viewer"
-#define AppVersion "0.1.0"
+#define AppVersion "0.2.0"
 #define AppPublisher "Spectral Viewer"
 #define AppExeName "spectral-viewer.exe"
 

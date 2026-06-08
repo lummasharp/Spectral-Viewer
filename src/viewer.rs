@@ -21,6 +21,9 @@ use image::{ColorType, ImageFormat};
 use serde::{Deserialize, Serialize};
 
 const APP_NAME: &str = "Spectral Viewer";
+const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
+const LATEST_RELEASE_URL: &str =
+    "https://api.github.com/repos/lummasharp/Spectral-Viewer/releases/latest";
 const MIN_ZOOM: f32 = 0.02;
 const MAX_ZOOM: f32 = 64.0;
 const FIT_PADDING: f32 = 48.0;
@@ -41,8 +44,31 @@ struct ViewTransform {
 }
 
 #[derive(Default, Deserialize, Serialize)]
+#[serde(default)]
 struct Preferences {
     fullscreen: bool,
+    nearest_neighbor: bool,
+    ignored_update: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct GithubRelease {
+    tag_name: String,
+    html_url: String,
+    assets: Vec<GithubAsset>,
+}
+
+#[derive(Deserialize)]
+struct GithubAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+#[derive(Clone)]
+struct AvailableUpdate {
+    tag: String,
+    version: String,
+    download_url: String,
 }
 
 struct DecodedImage {
@@ -155,6 +181,8 @@ pub struct ViewerApp {
     pending_preloads: HashSet<PathBuf>,
     loading: bool,
     image_metadata: Option<ImageMetadata>,
+    update_results: Receiver<Option<AvailableUpdate>>,
+    available_update: Option<AvailableUpdate>,
 }
 
 impl ViewerApp {
@@ -168,6 +196,8 @@ impl ViewerApp {
             cc.egui_ctx
                 .send_viewport_cmd(ViewportCommand::Fullscreen(true));
         }
+        let update_results =
+            start_update_check(cc.egui_ctx.clone(), preferences.ignored_update.clone());
         let mut app = Self {
             texture: None,
             image_size: Vec2::ZERO,
@@ -185,6 +215,8 @@ impl ViewerApp {
             pending_preloads: HashSet::new(),
             loading: false,
             image_metadata: None,
+            update_results,
+            available_update: None,
         };
 
         if let Some(path) = initial_path {
@@ -234,8 +266,12 @@ impl ViewerApp {
             .size(path)
             .unwrap_or_else(|| vec2(image.width() as f32, image.height() as f32));
         self.image_metadata = self.cache.metadata(path);
-        self.texture =
-            Some(ctx.load_texture(path.to_string_lossy(), image, TextureOptions::NEAREST));
+        let options = if self.preferences.nearest_neighbor {
+            TextureOptions::NEAREST
+        } else {
+            TextureOptions::LINEAR
+        };
+        self.texture = Some(ctx.load_texture(path.to_string_lossy(), image, options));
         self.loading = false;
         self.error = None;
     }
@@ -260,6 +296,12 @@ impl ViewerApp {
                 }
                 Err(_) => {}
             }
+        }
+    }
+
+    fn poll_update_check(&mut self) {
+        if let Ok(update) = self.update_results.try_recv() {
+            self.available_update = update;
         }
     }
 
@@ -324,6 +366,15 @@ impl ViewerApp {
         ctx.send_viewport_cmd(ViewportCommand::Fullscreen(self.preferences.fullscreen));
     }
 
+    fn toggle_scaling(&mut self, ctx: &egui::Context) {
+        self.preferences.nearest_neighbor = !self.preferences.nearest_neighbor;
+        if let Some(path) = self.current_path.clone()
+            && let Some(image) = self.cache.get(&path)
+        {
+            self.install_image(ctx, &path, image);
+        }
+    }
+
     fn zoom_by(&mut self, factor: f32, focus: Pos2, canvas: Rect) {
         let old_zoom = self.zoom;
         self.zoom = (self.zoom * factor).clamp(MIN_ZOOM, MAX_ZOOM);
@@ -366,6 +417,9 @@ impl ViewerApp {
         }
         if ctx.input(|input| input.key_pressed(Key::V)) {
             self.transform.flip_vertical = !self.transform.flip_vertical;
+        }
+        if ctx.input(|input| input.key_pressed(Key::S)) {
+            self.toggle_scaling(ctx);
         }
         if ctx.input(|input| input.key_pressed(Key::Num0) && input.modifiers.command) {
             self.zoom = 1.0;
@@ -506,16 +560,31 @@ impl ViewerApp {
             );
         }
 
-        let bar_size = vec2(438.0, 42.0);
+        let bar_size = vec2(514.0, 42.0);
         let bar = Rect::from_center_size(canvas.center_bottom() - vec2(0.0, 28.0), bar_size);
         painter.rect_filled(bar, 10.0, Color32::from_black_alpha(175));
 
-        let labels = ["Open", "<", "Fit", "1:1", "Rotate", "Flip H", "Flip V", ">"];
-        let widths = [54.0, 32.0, 42.0, 42.0, 56.0, 54.0, 54.0, 32.0];
+        let scaling_label = if self.preferences.nearest_neighbor {
+            "Nearest"
+        } else {
+            "Smooth"
+        };
+        let labels = [
+            "Open",
+            "<",
+            "Fit",
+            "1:1",
+            "Rotate",
+            "Flip H",
+            "Flip V",
+            scaling_label,
+            ">",
+        ];
+        let widths = [54.0, 32.0, 42.0, 42.0, 56.0, 54.0, 54.0, 72.0, 32.0];
         let mut x = bar.left() + 10.0;
         for (index, (label, width)) in labels.into_iter().zip(widths).enumerate() {
             let rect = Rect::from_min_size(pos2(x, bar.top() + 6.0), vec2(width, 30.0));
-            let enabled = !matches!(index, 1 | 7) || !self.folder_images.is_empty();
+            let enabled = !matches!(index, 1 | 8) || !self.folder_images.is_empty();
             let response = ui.put(
                 rect,
                 egui::Button::new(label)
@@ -540,12 +609,44 @@ impl ViewerApp {
                     4 => self.rotate_clockwise(),
                     5 => self.transform.flip_horizontal = !self.transform.flip_horizontal,
                     6 => self.transform.flip_vertical = !self.transform.flip_vertical,
-                    7 => self.navigate(ctx, 1),
+                    7 => self.toggle_scaling(ctx),
+                    8 => self.navigate(ctx, 1),
                     _ => {}
                 }
             }
             x += width + 2.0;
         }
+    }
+
+    fn update_prompt(&mut self, ctx: &egui::Context) {
+        let Some(update) = self.available_update.clone() else {
+            return;
+        };
+
+        egui::Window::new("Update available")
+            .collapsible(false)
+            .resizable(false)
+            .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
+            .show(ctx, |ui| {
+                ui.label(format!(
+                    "Spectral Viewer {} is available. You are using {}.",
+                    update.version, CURRENT_VERSION
+                ));
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    if ui.button("Download now").clicked() {
+                        ctx.open_url(egui::OpenUrl::new_tab(update.download_url));
+                        self.available_update = None;
+                    }
+                    if ui.button("Remind later").clicked() {
+                        self.available_update = None;
+                    }
+                    if ui.button("Ignore this version").clicked() {
+                        self.preferences.ignored_update = Some(update.tag);
+                        self.available_update = None;
+                    }
+                });
+            });
     }
 }
 
@@ -553,15 +654,82 @@ impl eframe::App for ViewerApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         self.poll_decoder(&ctx);
+        self.poll_update_check();
         self.handle_shortcuts(&ctx);
         let canvas = ui.max_rect();
         self.image_panel(&ctx, ui, canvas);
         self.overlay_controls(&ctx, ui, canvas);
+        self.update_prompt(&ctx);
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, STORAGE_KEY, &self.preferences);
     }
+}
+
+fn start_update_check(
+    ctx: egui::Context,
+    ignored_update: Option<String>,
+) -> Receiver<Option<AvailableUpdate>> {
+    let (sender, receiver) = mpsc::channel();
+    thread::Builder::new()
+        .name("spectral-update-check".to_owned())
+        .spawn(move || {
+            let update = fetch_available_update(ignored_update.as_deref())
+                .ok()
+                .flatten();
+            let _ = sender.send(update);
+            ctx.request_repaint();
+        })
+        .expect("failed to start update checker");
+    receiver
+}
+
+fn fetch_available_update(ignored_update: Option<&str>) -> Result<Option<AvailableUpdate>, String> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let release = client
+        .get(LATEST_RELEASE_URL)
+        .header(
+            reqwest::header::USER_AGENT,
+            format!("{APP_NAME}/{CURRENT_VERSION}"),
+        )
+        .send()
+        .and_then(reqwest::blocking::Response::error_for_status)
+        .map_err(|error| error.to_string())?
+        .json::<GithubRelease>()
+        .map_err(|error| error.to_string())?;
+    available_update_from_release(release, ignored_update)
+}
+
+fn available_update_from_release(
+    release: GithubRelease,
+    ignored_update: Option<&str>,
+) -> Result<Option<AvailableUpdate>, String> {
+    if ignored_update == Some(release.tag_name.as_str()) {
+        return Ok(None);
+    }
+
+    let latest = semver::Version::parse(release.tag_name.trim_start_matches(['v', 'V']))
+        .map_err(|error| error.to_string())?;
+    let current = semver::Version::parse(CURRENT_VERSION).map_err(|error| error.to_string())?;
+    if latest <= current {
+        return Ok(None);
+    }
+
+    let download_url = release
+        .assets
+        .iter()
+        .find(|asset| asset.name.to_ascii_lowercase().ends_with(".exe"))
+        .map(|asset| asset.browser_download_url.clone())
+        .unwrap_or(release.html_url);
+    Ok(Some(AvailableUpdate {
+        tag: release.tag_name,
+        version: latest.to_string(),
+        download_url,
+    }))
 }
 
 fn decoder_worker(
@@ -825,9 +993,10 @@ fn paint_transformed_image(
 #[cfg(test)]
 mod tests {
     use super::{
-        DecodedImage, ImageCache, ImageDecoder, Preferences, ViewTransform, ViewerApp,
-        checker_index, fit_zoom, format_file_size, images_in_same_folder, is_supported_extension,
-        transformed_size, transformed_uv, wheel_zoom_factor, wrapped_index,
+        DecodedImage, GithubAsset, GithubRelease, ImageCache, ImageDecoder, Preferences,
+        ViewTransform, ViewerApp, available_update_from_release, checker_index, fit_zoom,
+        format_file_size, images_in_same_folder, is_supported_extension, transformed_size,
+        transformed_uv, wheel_zoom_factor, wrapped_index,
     };
     use eframe::egui::{
         Color32, ColorImage, Event, Modifiers, MouseWheelUnit, TouchPhase, pos2, vec2,
@@ -920,6 +1089,8 @@ mod tests {
             pending_preloads: HashSet::new(),
             loading: false,
             image_metadata: None,
+            update_results: std::sync::mpsc::channel().1,
+            available_update: None,
         };
 
         app.rotate_clockwise();
@@ -982,5 +1153,43 @@ mod tests {
         assert_eq!(format_file_size(999), "999 B");
         assert_eq!(format_file_size(1024), "1.0 KB");
         assert_eq!(format_file_size(2_621_440), "2.5 MB");
+    }
+
+    #[test]
+    fn update_check_uses_newer_installer_release() {
+        let release = GithubRelease {
+            tag_name: "v999.0.0".to_owned(),
+            html_url: "https://example.com/release".to_owned(),
+            assets: vec![GithubAsset {
+                name: "SpectralViewer-Setup-999.0.0.exe".to_owned(),
+                browser_download_url: "https://example.com/installer.exe".to_owned(),
+            }],
+        };
+
+        let update = available_update_from_release(release, None)
+            .unwrap()
+            .unwrap();
+        assert_eq!(update.tag, "v999.0.0");
+        assert_eq!(update.download_url, "https://example.com/installer.exe");
+    }
+
+    #[test]
+    fn ignored_release_stays_ignored_until_the_tag_changes() {
+        let release = || GithubRelease {
+            tag_name: "v999.0.0".to_owned(),
+            html_url: "https://example.com/release".to_owned(),
+            assets: Vec::new(),
+        };
+
+        assert!(
+            available_update_from_release(release(), Some("v999.0.0"))
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            available_update_from_release(release(), Some("v998.0.0"))
+                .unwrap()
+                .is_some()
+        );
     }
 }
