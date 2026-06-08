@@ -3,26 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Spectral Viewer - A fast, minimal image viewer for Windows</title>
+    <title>Spectral Viewer</title>
     <meta
       name="description"
-      content="Spectral Viewer is a fast, lightweight image viewer for Windows with smooth zooming, broad format support, nearest-neighbor scaling, and automatic updates."
+      content="Spectral Viewer is a lightweight and minimal image viewer for Windows."
     />
     <meta name="theme-color" content="#63d5f4" />
-    <meta property="og:title" content="Spectral Viewer" />
-    <meta
-      property="og:description"
-      content="A fast, minimal desktop image viewer for Windows."
-    />
-    <meta property="og:type" content="website" />
-    <meta
-      property="og:url"
-      content="https://lummasharp.github.io/Spectral-Viewer/"
-    />
-    <link
-      rel="canonical"
-      href="https://lummasharp.github.io/Spectral-Viewer/"
-    />
     <link rel="icon" href="assets/icon.ico" sizes="any" />
     <link rel="stylesheet" href="styles.css" />
     <script type="application/ld+json">
@@ -32,181 +18,112 @@
         "name": "Spectral Viewer",
         "applicationCategory": "MultimediaApplication",
         "operatingSystem": "Windows",
-        "description": "A fast, minimal desktop image viewer for Windows.",
+        "description": "A lightweight and minimal image viewer for Windows.",
         "downloadUrl": "https://github.com/lummasharp/Spectral-Viewer/releases/latest",
-        "codeRepository": "https://github.com/lummasharp/Spectral-Viewer",
-        "license": "https://github.com/lummasharp/Spectral-Viewer/blob/main/LICENSE"
+        "codeRepository": "https://github.com/lummasharp/Spectral-Viewer"
       }
     </script>
   </head>
   <body>
-    <header class="site-header">
-      <a class="brand" href="#" aria-label="Spectral Viewer home">
-        <img src="assets/icon.ico" alt="" width="38" height="38" />
-        <span>Spectral Viewer</span>
-      </a>
-      <nav aria-label="Main navigation">
+    <main class="page">
+      <header class="hero">
+        <a class="brand" href="https://github.com/lummasharp/Spectral-Viewer">
+          <img src="assets/icon.ico" alt="" width="42" height="42" />
+          <span>Spectral Viewer</span>
+        </a>
+        <h1>A lightweight and minimal image viewer.</h1>
+        <p class="lede">
+          A recreation inspired by
+          <a href="https://github.com/ArturKovacs/emulsion">Emulsion</a>,
+          after the original project was discontinued.
+        </p>
+        <p class="actions">
+          <a href="https://github.com/lummasharp/Spectral-Viewer/releases/latest"
+            >Download</a
+          >
+          <a href="https://github.com/lummasharp/Spectral-Viewer">View on GitHub</a>
+        </p>
+      </header>
+
+      <nav class="nav" aria-label="Page sections">
+        <a href="#overview">Overview</a>
         <a href="#showcase">Showcase</a>
-        <a href="#features">Features</a>
-        <a href="https://github.com/lummasharp/Spectral-Viewer">GitHub</a>
+        <a href="#details">Details</a>
+        <a href="#download">Download</a>
       </nav>
-    </header>
 
-    <main>
-      <section class="hero">
-        <div class="hero-content">
-          <div class="eyebrow">Fast. Lightweight. Focused.</div>
-          <h1>Your images,<br /><span>nothing in the way.</span></h1>
-          <p>
-            Spectral Viewer is a small native image viewer for Windows, built
-            for opening local images quickly and browsing folders smoothly.
-          </p>
-          <div class="actions">
-            <a
-              class="button primary"
-              href="https://github.com/lummasharp/Spectral-Viewer/releases/latest"
-              >Download for Windows</a
-            >
-            <a
-              class="button secondary"
-              href="https://github.com/lummasharp/Spectral-Viewer"
-              >View source</a
-            >
-          </div>
-          <div class="hero-meta">Free and open source · Native Rust app</div>
-        </div>
-
-        <div class="hero-window" aria-label="Spectral Viewer preview placeholder">
-          <div class="window-bar">
-            <span></span><span></span><span></span>
-            <div>Spectral Viewer</div>
-          </div>
-          <div class="window-content">
-            <div class="sun"></div>
-            <div class="cloud cloud-one"></div>
-            <div class="cloud cloud-two"></div>
-            <div class="mountain mountain-back"></div>
-            <div class="mountain mountain-front"></div>
-            <p>Replace with your main showcase video</p>
-          </div>
-          <div class="window-status">
-            <span>showcase.jpg</span>
-            <span>100% · 5000 × 3000</span>
-          </div>
+      <section id="overview" class="section">
+        <h2>Overview</h2>
+        <p>
+          Spectral Viewer focuses on opening local images quickly and browsing
+          a folder without editor-style clutter.
+        </p>
+        <div class="media-block">
+          <div class="media-placeholder">Main showcase video placeholder</div>
+          <p>Open an image, zoom, pan, switch scaling, and enter fullscreen.</p>
         </div>
       </section>
 
-      <section class="intro">
+      <section id="showcase" class="section">
+        <h2>Showcase</h2>
+
+        <div class="feature">
+          <h3>Fast</h3>
+          <p>
+            Displays large images quickly and stays light on resources when
+            idle.
+          </p>
+          <div class="media-placeholder short">Video placeholder</div>
+        </div>
+
+        <div class="feature">
+          <h3>Cursor Anchored Zoom</h3>
+          <p>
+            Zooms toward the area under the cursor, so detailed inspection feels
+            direct.
+          </p>
+          <div class="media-placeholder short">Video placeholder</div>
+        </div>
+
+        <div class="feature">
+          <h3>Pixel Art Friendly</h3>
+          <p>
+            Switches between smooth scaling and nearest-neighbor scaling when
+            you want real pixels.
+          </p>
+          <div class="media-placeholder short">Video placeholder</div>
+        </div>
+      </section>
+
+      <section id="details" class="section">
+        <h2>Details</h2>
         <p>
-          Spectral Viewer is a recreation inspired by
-          <a href="https://github.com/ArturKovacs/emulsion">Emulsion</a>, made
-          to continue its fast, minimal image-viewing experience after the
-          original project was discontinued.
+          Supported by default: AVIF, BMP, DDS, OpenEXR, GIF, HDR, ICO, JPEG,
+          PNG, PNM, QOI, SVG, TGA, TIFF, and WebP.
+        </p>
+        <p>
+          Automatic GitHub release checks are built in, and the installer can
+          relaunch the app after updating.
         </p>
       </section>
 
-      <section class="section" id="showcase">
-        <div class="section-heading">
-          <span>See it in action</span>
-          <h2>Simple where it matters.</h2>
-          <p>Short, focused interactions without clutter or editing tools.</p>
-        </div>
-
-        <div class="showcase-grid">
-          <article class="showcase-card wide">
-            <div class="media-placeholder">
-              <span>Video placeholder</span>
-              <strong>Open, zoom, and browse a large image</strong>
-            </div>
-            <div class="showcase-copy">
-              <h3>Fast image browsing</h3>
-              <p>Open large images quickly, zoom smoothly, and move through an entire folder.</p>
-            </div>
-          </article>
-
-          <article class="showcase-card">
-            <div class="media-placeholder compact">
-              <span>Video placeholder</span>
-              <strong>Switch scaling modes</strong>
-            </div>
-            <div class="showcase-copy">
-              <h3>Sharp pixels on demand</h3>
-              <p>Switch between smooth and nearest-neighbor scaling with one key.</p>
-            </div>
-          </article>
-
-          <article class="showcase-card">
-            <div class="media-placeholder compact">
-              <span>Video placeholder</span>
-              <strong>Open several formats</strong>
-            </div>
-            <div class="showcase-copy">
-              <h3>Broad format support</h3>
-              <p>View common formats alongside AVIF, SVG, EXR, HDR, DDS, and TGA.</p>
-            </div>
-          </article>
-
-          <article class="showcase-card wide">
-            <div class="media-placeholder">
-              <span>Video placeholder</span>
-              <strong>One-click automatic update</strong>
-            </div>
-            <div class="showcase-copy">
-              <h3>Updates without the busywork</h3>
-              <p>Download, install, and reopen the latest release with one click.</p>
-            </div>
-          </article>
-        </div>
+      <section id="download" class="section">
+        <h2>Download</h2>
+        <p>
+          Get the latest Windows release from the GitHub releases page.
+        </p>
+        <p class="actions">
+          <a href="https://github.com/lummasharp/Spectral-Viewer/releases/latest"
+            >Download latest release</a
+          >
+          <a href="https://github.com/lummasharp/Spectral-Viewer">Source code</a>
+        </p>
       </section>
 
-      <section class="section features-section" id="features">
-        <div class="section-heading">
-          <span>Built for viewing</span>
-          <h2>Everything you need. Nothing you do not.</h2>
-        </div>
-        <div class="feature-grid">
-          <article>
-            <div class="feature-icon">01</div>
-            <h3>Smooth navigation</h3>
-            <p>Cursor-centered zoom, click-drag panning, rotation, flips, and folder browsing.</p>
-          </article>
-          <article>
-            <div class="feature-icon">02</div>
-            <h3>Lightweight by design</h3>
-            <p>A focused native desktop application without editing suites or unnecessary tools.</p>
-          </article>
-          <article>
-            <div class="feature-icon">03</div>
-            <h3>Windows integration</h3>
-            <p>Open supported images directly from Windows and use a clean fullscreen mode.</p>
-          </article>
-          <article>
-            <div class="feature-icon">04</div>
-            <h3>Automatic updates</h3>
-            <p>Get notified of new releases, install them silently, and return to viewing.</p>
-          </article>
-        </div>
-      </section>
-
-      <section class="download-section">
-        <img src="assets/icon.ico" alt="Spectral Viewer logo" width="76" height="76" />
-        <h2>Ready for a clearer view?</h2>
-        <p>Download the latest Spectral Viewer release for Windows.</p>
-        <a
-          class="button primary"
-          href="https://github.com/lummasharp/Spectral-Viewer/releases/latest"
-          >Download latest release</a
-        >
-      </section>
+      <footer class="footer">
+        <p>Free and open source under the MIT License.</p>
+        <p>Windows only.</p>
+      </footer>
     </main>
-
-    <footer>
-      <div class="brand">
-        <img src="assets/icon.ico" alt="" width="30" height="30" />
-        <span>Spectral Viewer</span>
-      </div>
-      <p>Free and open source under the MIT License.</p>
-      <a href="https://github.com/lummasharp/Spectral-Viewer">GitHub</a>
-    </footer>
   </body>
 </html>
