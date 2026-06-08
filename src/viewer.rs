@@ -3,6 +3,7 @@ use std::{
     fs,
     io::BufReader,
     path::{Path, PathBuf},
+    process::Command,
     sync::{
         Arc,
         mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError},
@@ -19,6 +20,7 @@ use eframe::emath::GuiRounding;
 use eframe::epaint::Vertex;
 use image::{ColorType, DynamicImage, ImageFormat, ImageReader};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 const APP_NAME: &str = "Spectral Viewer";
 const CURRENT_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -54,7 +56,6 @@ struct Preferences {
 #[derive(Deserialize)]
 struct GithubRelease {
     tag_name: String,
-    html_url: String,
     assets: Vec<GithubAsset>,
 }
 
@@ -62,6 +63,7 @@ struct GithubRelease {
 struct GithubAsset {
     name: String,
     browser_download_url: String,
+    digest: Option<String>,
 }
 
 #[derive(Clone)]
@@ -69,6 +71,13 @@ struct AvailableUpdate {
     tag: String,
     version: String,
     download_url: String,
+    sha256: String,
+}
+
+enum UpdateInstallState {
+    Idle,
+    Downloading,
+    Failed(String),
 }
 
 struct DecodedImage {
@@ -183,6 +192,9 @@ pub struct ViewerApp {
     image_metadata: Option<ImageMetadata>,
     update_results: Receiver<Option<AvailableUpdate>>,
     available_update: Option<AvailableUpdate>,
+    update_install_results: Receiver<Result<(), String>>,
+    update_install_sender: Sender<Result<(), String>>,
+    update_install_state: UpdateInstallState,
 }
 
 impl ViewerApp {
@@ -200,6 +212,7 @@ impl ViewerApp {
             .send_viewport_cmd(ViewportCommand::Visible(true));
         let update_results =
             start_update_check(cc.egui_ctx.clone(), preferences.ignored_update.clone());
+        let (update_install_sender, update_install_results) = mpsc::channel();
         let mut app = Self {
             texture: None,
             image_size: Vec2::ZERO,
@@ -219,6 +232,9 @@ impl ViewerApp {
             image_metadata: None,
             update_results,
             available_update: None,
+            update_install_results,
+            update_install_sender,
+            update_install_state: UpdateInstallState::Idle,
         };
 
         if let Some(path) = initial_path {
@@ -305,6 +321,29 @@ impl ViewerApp {
         if let Ok(update) = self.update_results.try_recv() {
             self.available_update = update;
         }
+    }
+
+    fn poll_update_install(&mut self, ctx: &egui::Context) {
+        if let Ok(result) = self.update_install_results.try_recv() {
+            match result {
+                Ok(()) => ctx.send_viewport_cmd(ViewportCommand::Close),
+                Err(error) => self.update_install_state = UpdateInstallState::Failed(error),
+            }
+        }
+    }
+
+    fn install_update(&mut self, ctx: &egui::Context, update: AvailableUpdate) {
+        self.update_install_state = UpdateInstallState::Downloading;
+        let sender = self.update_install_sender.clone();
+        let ctx = ctx.clone();
+        thread::Builder::new()
+            .name("spectral-update-installer".to_owned())
+            .spawn(move || {
+                let result = download_and_launch_update(&update);
+                let _ = sender.send(result);
+                ctx.request_repaint();
+            })
+            .expect("failed to start update installer");
     }
 
     fn preload_adjacent(&mut self) {
@@ -638,19 +677,34 @@ impl ViewerApp {
                     update.version, CURRENT_VERSION
                 ));
                 ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    if ui.button("Download now").clicked() {
-                        ctx.open_url(egui::OpenUrl::new_tab(update.download_url));
-                        self.available_update = None;
+                match &self.update_install_state {
+                    UpdateInstallState::Idle => {
+                        ui.horizontal(|ui| {
+                            if ui.button("Download now").clicked() {
+                                self.install_update(ctx, update.clone());
+                            }
+                            if ui.button("Remind later").clicked() {
+                                self.available_update = None;
+                            }
+                            if ui.button("Ignore this version").clicked() {
+                                self.preferences.ignored_update = Some(update.tag);
+                                self.available_update = None;
+                            }
+                        });
                     }
-                    if ui.button("Remind later").clicked() {
-                        self.available_update = None;
+                    UpdateInstallState::Downloading => {
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label("Downloading and installing update...");
+                        });
                     }
-                    if ui.button("Ignore this version").clicked() {
-                        self.preferences.ignored_update = Some(update.tag);
-                        self.available_update = None;
+                    UpdateInstallState::Failed(error) => {
+                        ui.colored_label(Color32::from_rgb(205, 125, 125), error);
+                        if ui.button("Try again").clicked() {
+                            self.install_update(ctx, update.clone());
+                        }
                     }
-                });
+                }
             });
     }
 }
@@ -660,6 +714,7 @@ impl eframe::App for ViewerApp {
         let ctx = ui.ctx().clone();
         self.poll_decoder(&ctx);
         self.poll_update_check();
+        self.poll_update_install(&ctx);
         self.handle_shortcuts(&ctx);
         let canvas = ui.max_rect();
         self.image_panel(&ctx, ui, canvas);
@@ -728,17 +783,72 @@ fn available_update_from_release(
         return Ok(None);
     }
 
-    let download_url = release
+    let asset = release
         .assets
         .iter()
         .find(|asset| asset.name.to_ascii_lowercase().ends_with(".exe"))
-        .map(|asset| asset.browser_download_url.clone())
-        .unwrap_or(release.html_url);
+        .ok_or("the release does not contain a Windows installer")?;
+    let sha256 = asset
+        .digest
+        .as_deref()
+        .and_then(|digest| digest.strip_prefix("sha256:"))
+        .ok_or("the Windows installer does not have a SHA-256 digest")?
+        .to_owned();
     Ok(Some(AvailableUpdate {
         tag: release.tag_name,
         version: latest.to_string(),
-        download_url,
+        download_url: asset.browser_download_url.clone(),
+        sha256,
     }))
+}
+
+fn download_and_launch_update(update: &AvailableUpdate) -> Result<(), String> {
+    let installer_path =
+        std::env::temp_dir().join(format!("SpectralViewer-Setup-{}.exe", update.version));
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .build()
+        .map_err(|error| error.to_string())?;
+    let bytes = client
+        .get(&update.download_url)
+        .header(
+            reqwest::header::USER_AGENT,
+            format!("{APP_NAME}/{CURRENT_VERSION}"),
+        )
+        .send()
+        .and_then(reqwest::blocking::Response::error_for_status)
+        .map_err(|error| format!("Could not download update: {error}"))?
+        .bytes()
+        .map_err(|error| format!("Could not read update: {error}"))?;
+
+    let actual = format!("{:x}", Sha256::digest(&bytes));
+    if !actual.eq_ignore_ascii_case(&update.sha256) {
+        return Err("The downloaded update failed its security check.".to_owned());
+    }
+
+    fs::write(&installer_path, &bytes)
+        .map_err(|error| format!("Could not save update: {error}"))?;
+    launch_update_installer(&installer_path)
+}
+
+fn launch_update_installer(path: &Path) -> Result<(), String> {
+    let mut command = Command::new(path);
+    command.args([
+        "/VERYSILENT",
+        "/SUPPRESSMSGBOXES",
+        "/NORESTART",
+        "/CLOSEAPPLICATIONS",
+        "/AUTOLAUNCH=1",
+    ]);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Could not start update installer: {error}"))
 }
 
 fn decoder_worker(
@@ -1190,9 +1300,10 @@ fn paint_transformed_image(
 mod tests {
     use super::{
         DecodedImage, GithubAsset, GithubRelease, ImageCache, ImageDecoder, Preferences,
-        ViewTransform, ViewerApp, apply_exif_orientation, available_update_from_release,
-        checker_index, fit_zoom, format_file_size, images_in_same_folder, is_supported_extension,
-        transformed_size, transformed_uv, unpremultiply_rgba, wheel_zoom_factor, wrapped_index,
+        UpdateInstallState, ViewTransform, ViewerApp, apply_exif_orientation,
+        available_update_from_release, checker_index, fit_zoom, format_file_size,
+        images_in_same_folder, is_supported_extension, transformed_size, transformed_uv,
+        unpremultiply_rgba, wheel_zoom_factor, wrapped_index,
     };
     use eframe::egui::{
         Color32, ColorImage, Event, Modifiers, MouseWheelUnit, TouchPhase, pos2, vec2,
@@ -1302,6 +1413,9 @@ mod tests {
             image_metadata: None,
             update_results: std::sync::mpsc::channel().1,
             available_update: None,
+            update_install_results: std::sync::mpsc::channel().1,
+            update_install_sender: std::sync::mpsc::channel().0,
+            update_install_state: UpdateInstallState::Idle,
         };
 
         app.rotate_clockwise();
@@ -1370,10 +1484,10 @@ mod tests {
     fn update_check_uses_newer_installer_release() {
         let release = GithubRelease {
             tag_name: "v999.0.0".to_owned(),
-            html_url: "https://example.com/release".to_owned(),
             assets: vec![GithubAsset {
                 name: "SpectralViewer-Setup-999.0.0.exe".to_owned(),
                 browser_download_url: "https://example.com/installer.exe".to_owned(),
+                digest: Some(format!("sha256:{}", "a".repeat(64))),
             }],
         };
 
@@ -1382,14 +1496,18 @@ mod tests {
             .unwrap();
         assert_eq!(update.tag, "v999.0.0");
         assert_eq!(update.download_url, "https://example.com/installer.exe");
+        assert_eq!(update.sha256, "a".repeat(64));
     }
 
     #[test]
     fn ignored_release_stays_ignored_until_the_tag_changes() {
         let release = || GithubRelease {
             tag_name: "v999.0.0".to_owned(),
-            html_url: "https://example.com/release".to_owned(),
-            assets: Vec::new(),
+            assets: vec![GithubAsset {
+                name: "SpectralViewer-Setup-999.0.0.exe".to_owned(),
+                browser_download_url: "https://example.com/installer.exe".to_owned(),
+                digest: Some(format!("sha256:{}", "a".repeat(64))),
+            }],
         };
 
         assert!(

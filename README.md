@@ -1,4 +1,4 @@
-# Spectral Viewer v0.3.0
+# Spectral Viewer v0.3.1
 
 A small, native desktop image viewer written in Rust. It focuses on opening local images quickly and browsing a folder without editing tools.
 
@@ -15,7 +15,7 @@ A small, native desktop image viewer written in Rust. It focuses on opening loca
 - EXIF orientation handling
 - Clear file name, folder position, zoom level, image metadata, and load errors
 - Background image decoding, adjacent-image preloading, and a bounded image cache
-- Automatic GitHub release checks with remind-later and per-version ignore options
+- Automatic GitHub release checks and one-click background installation
 - Currently supports only Windows
 
 Supported by default: AVIF, BMP, DDS, OpenEXR, GIF, HDR, ICO, JPEG, PNG/PNM, QOI, SVG, TGA, TIFF, and WebP.

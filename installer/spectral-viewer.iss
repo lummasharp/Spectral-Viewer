@@ -1,5 +1,5 @@
 #define AppName "Spectral Viewer"
-#define AppVersion "0.3.0"
+#define AppVersion "0.3.1"
 #define AppPublisher "Spectral Viewer"
 #define AppExeName "spectral-viewer.exe"
 
@@ -168,8 +168,14 @@ Root: HKCU; Subkey: "Software\Classes\SystemFileAssociations\.webp\shell\Spectra
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Launch Spectral Viewer"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#AppExeName}"; Flags: nowait skipifdoesntexist; Check: IsAutoUpdate
 
 [Code]
+function IsAutoUpdate: Boolean;
+begin
+  Result := ExpandConstant('{param:AUTOLAUNCH|0}') = '1';
+end;
+
 procedure RemoveContextMenuEntries;
 begin
   RegDeleteKeyIncludingSubkeys(HKCU, 'Software\Classes\SystemFileAssociations\.bmp\shell\SpectralViewer');
