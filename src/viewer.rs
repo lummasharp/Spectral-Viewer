@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     fs,
+    io::BufReader,
     path::{Path, PathBuf},
     sync::{
         Arc,
@@ -16,8 +17,7 @@ use eframe::egui::{
 };
 use eframe::emath::GuiRounding;
 use eframe::epaint::Vertex;
-use image::ImageReader;
-use image::{ColorType, ImageFormat};
+use image::{ColorType, DynamicImage, ImageFormat, ImageReader};
 use serde::{Deserialize, Serialize};
 
 const APP_NAME: &str = "Spectral Viewer";
@@ -32,8 +32,8 @@ const STORAGE_KEY: &str = "spectral-viewer-preferences";
 const CACHE_MAX_BYTES: usize = 256 * 1024 * 1024;
 const CACHE_MAX_IMAGES: usize = 16;
 const IMAGE_EXTENSIONS: &[&str] = &[
-    "bmp", "gif", "ico", "jpeg", "jpg", "pbm", "pgm", "png", "pnm", "ppm", "qoi", "tif", "tiff",
-    "webp",
+    "avif", "bmp", "dds", "exr", "gif", "hdr", "ico", "jpeg", "jpg", "pbm", "pgm", "png", "pnm",
+    "ppm", "qoi", "svg", "tga", "tif", "tiff", "webp",
 ];
 
 #[derive(Clone, Copy, Default)]
@@ -196,6 +196,8 @@ impl ViewerApp {
             cc.egui_ctx
                 .send_viewport_cmd(ViewportCommand::Fullscreen(true));
         }
+        cc.egui_ctx
+            .send_viewport_cmd(ViewportCommand::Visible(true));
         let update_results =
             start_update_check(cc.egui_ctx.clone(), preferences.ignored_update.clone());
         let mut app = Self {
@@ -407,6 +409,9 @@ impl ViewerApp {
             self.fit_requested = true;
         }
         if ctx.input(|input| input.key_pressed(Key::F11)) {
+            self.toggle_fullscreen(ctx);
+        }
+        if ctx.input(|input| input.key_pressed(Key::Escape)) && self.preferences.fullscreen {
             self.toggle_fullscreen(ctx);
         }
         if ctx.input(|input| input.key_pressed(Key::R)) {
@@ -665,6 +670,10 @@ impl eframe::App for ViewerApp {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         eframe::set_value(storage, STORAGE_KEY, &self.preferences);
     }
+
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        Color32::from_rgb(17, 18, 20).to_normalized_gamma_f32()
+    }
 }
 
 fn start_update_check(
@@ -773,12 +782,22 @@ fn load_color_image(path: &Path) -> Result<DecodedImage, String> {
     }
 
     let file_size = fs::metadata(path).map_err(|error| error.to_string())?.len();
+    if has_extension(path, "svg") {
+        return load_svg(path, file_size);
+    }
+    if has_extension(path, "avif") {
+        return load_avif(path, file_size);
+    }
+    let orientation = read_exif_orientation(path);
     let reader = ImageReader::open(path)
         .map_err(|error| error.to_string())?
         .with_guessed_format()
         .map_err(|error| error.to_string())?;
     let format = reader.format();
-    let decoded = reader.decode().map_err(|error| error.to_string())?;
+    let decoded = apply_exif_orientation(
+        reader.decode().map_err(|error| error.to_string())?,
+        orientation,
+    );
     let color_mode = color_mode_name(decoded.color()).to_owned();
     let rgba = decoded.to_rgba8();
     let (width, height) = rgba.dimensions();
@@ -801,6 +820,183 @@ fn load_color_image(path: &Path) -> Result<DecodedImage, String> {
             file_size,
         },
     })
+}
+
+fn load_avif(path: &Path, file_size: u64) -> Result<DecodedImage, String> {
+    let data = fs::read(path).map_err(|error| error.to_string())?;
+    let image = avif_decode::Decoder::from_avif(&data)
+        .and_then(avif_decode::Decoder::to_image)
+        .map_err(|error| error.to_string())?;
+    let (width, height, rgba) = match image {
+        avif_decode::Image::Rgb8(image) => (
+            image.width(),
+            image.height(),
+            image
+                .pixels()
+                .flat_map(|pixel| [pixel.r, pixel.g, pixel.b, 255])
+                .collect(),
+        ),
+        avif_decode::Image::Rgba8(image) => (
+            image.width(),
+            image.height(),
+            image
+                .pixels()
+                .flat_map(|pixel| [pixel.r, pixel.g, pixel.b, pixel.a])
+                .collect(),
+        ),
+        avif_decode::Image::Gray8(image) => (
+            image.width(),
+            image.height(),
+            image
+                .pixels()
+                .flat_map(|pixel| {
+                    let value = pixel.value();
+                    [value, value, value, 255]
+                })
+                .collect(),
+        ),
+        avif_decode::Image::Rgb16(image) => (
+            image.width(),
+            image.height(),
+            image
+                .pixels()
+                .flat_map(|pixel| {
+                    [
+                        (pixel.r >> 8) as u8,
+                        (pixel.g >> 8) as u8,
+                        (pixel.b >> 8) as u8,
+                        255,
+                    ]
+                })
+                .collect(),
+        ),
+        avif_decode::Image::Rgba16(image) => (
+            image.width(),
+            image.height(),
+            image
+                .pixels()
+                .flat_map(|pixel| {
+                    [
+                        (pixel.r >> 8) as u8,
+                        (pixel.g >> 8) as u8,
+                        (pixel.b >> 8) as u8,
+                        (pixel.a >> 8) as u8,
+                    ]
+                })
+                .collect(),
+        ),
+        avif_decode::Image::Gray16(image) => (
+            image.width(),
+            image.height(),
+            image
+                .pixels()
+                .flat_map(|pixel| {
+                    let value = (pixel.value() >> 8) as u8;
+                    [value, value, value, 255]
+                })
+                .collect(),
+        ),
+    };
+    decoded_from_rgba(rgba, width, height, "AVIF", "RGBA 8-bit", file_size)
+}
+
+fn load_svg(path: &Path, file_size: u64) -> Result<DecodedImage, String> {
+    let mut options = resvg::usvg::Options {
+        resources_dir: path.parent().map(Path::to_owned),
+        ..Default::default()
+    };
+    options.fontdb_mut().load_system_fonts();
+    let data = fs::read(path).map_err(|error| error.to_string())?;
+    let tree = resvg::usvg::Tree::from_data(&data, &options).map_err(|error| error.to_string())?;
+    let size = tree.size().to_int_size();
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(size.width(), size.height())
+        .ok_or("SVG dimensions are too large")?;
+    resvg::render(
+        &tree,
+        resvg::tiny_skia::Transform::default(),
+        &mut pixmap.as_mut(),
+    );
+    let mut rgba = pixmap.take();
+    unpremultiply_rgba(&mut rgba);
+    decoded_from_rgba(
+        rgba,
+        size.width() as usize,
+        size.height() as usize,
+        "SVG",
+        "RGBA 8-bit",
+        file_size,
+    )
+}
+
+fn decoded_from_rgba(
+    rgba: Vec<u8>,
+    width: usize,
+    height: usize,
+    format: &str,
+    color_mode: &str,
+    file_size: u64,
+) -> Result<DecodedImage, String> {
+    let bytes = width
+        .checked_mul(height)
+        .and_then(|pixels| pixels.checked_mul(4))
+        .ok_or("image dimensions are too large")?;
+    if rgba.len() != bytes {
+        return Err("decoded image buffer has an unexpected size".to_owned());
+    }
+    Ok(DecodedImage {
+        pixels: Arc::new(ColorImage::from_rgba_unmultiplied([width, height], &rgba)),
+        size: vec2(width as f32, height as f32),
+        bytes,
+        metadata: ImageMetadata {
+            width,
+            height,
+            format: format.to_owned(),
+            color_mode: color_mode.to_owned(),
+            file_size,
+        },
+    })
+}
+
+fn unpremultiply_rgba(rgba: &mut [u8]) {
+    for pixel in rgba.chunks_exact_mut(4) {
+        let alpha = pixel[3] as u16;
+        if alpha > 0 && alpha < 255 {
+            for channel in &mut pixel[..3] {
+                *channel = ((*channel as u16 * 255) / alpha).min(255) as u8;
+            }
+        }
+    }
+}
+
+fn read_exif_orientation(path: &Path) -> u32 {
+    let Ok(file) = fs::File::open(path) else {
+        return 1;
+    };
+    let Ok(exif) = exif::Reader::new().read_from_container(&mut BufReader::new(file)) else {
+        return 1;
+    };
+    exif.get_field(exif::Tag::Orientation, exif::In::PRIMARY)
+        .and_then(|field| field.value.get_uint(0))
+        .unwrap_or(1)
+}
+
+fn apply_exif_orientation(image: DynamicImage, orientation: u32) -> DynamicImage {
+    match orientation {
+        2 => image.fliph(),
+        3 => image.rotate180(),
+        4 => image.flipv(),
+        5 => image.rotate90().fliph(),
+        6 => image.rotate90(),
+        7 => image.rotate270().fliph(),
+        8 => image.rotate270(),
+        _ => image,
+    }
+}
+
+fn has_extension(path: &Path, extension: &str) -> bool {
+    path.extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| value.eq_ignore_ascii_case(extension))
 }
 
 fn format_name(format: Option<ImageFormat>) -> String {
@@ -994,9 +1190,9 @@ fn paint_transformed_image(
 mod tests {
     use super::{
         DecodedImage, GithubAsset, GithubRelease, ImageCache, ImageDecoder, Preferences,
-        ViewTransform, ViewerApp, available_update_from_release, checker_index, fit_zoom,
-        format_file_size, images_in_same_folder, is_supported_extension, transformed_size,
-        transformed_uv, wheel_zoom_factor, wrapped_index,
+        ViewTransform, ViewerApp, apply_exif_orientation, available_update_from_release,
+        checker_index, fit_zoom, format_file_size, images_in_same_folder, is_supported_extension,
+        transformed_size, transformed_uv, unpremultiply_rgba, wheel_zoom_factor, wrapped_index,
     };
     use eframe::egui::{
         Color32, ColorImage, Event, Modifiers, MouseWheelUnit, TouchPhase, pos2, vec2,
@@ -1007,7 +1203,22 @@ mod tests {
     fn supported_extensions_are_case_insensitive() {
         assert!(is_supported_extension(Path::new("photo.JPEG")));
         assert!(is_supported_extension(Path::new("photo.webp")));
+        assert!(is_supported_extension(Path::new("photo.avif")));
+        assert!(is_supported_extension(Path::new("drawing.svg")));
         assert!(!is_supported_extension(Path::new("notes.txt")));
+    }
+
+    #[test]
+    fn exif_orientation_rotates_pixels_before_display() {
+        let image = image::DynamicImage::ImageRgba8(image::RgbaImage::new(640, 480));
+        assert_eq!(apply_exif_orientation(image, 6).width(), 480);
+    }
+
+    #[test]
+    fn svg_pixels_are_unpremultiplied_before_upload() {
+        let mut pixel = [64, 32, 16, 128];
+        unpremultiply_rgba(&mut pixel);
+        assert_eq!(pixel, [127, 63, 31, 128]);
     }
 
     #[test]

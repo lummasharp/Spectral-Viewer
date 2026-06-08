@@ -1,4 +1,4 @@
-# Spectral Viewer v0.2.0
+# Spectral Viewer v0.3.0
 
 A small, native desktop image viewer written in Rust. It focuses on opening local images quickly and browsing a folder without editing tools.
 
@@ -11,12 +11,14 @@ A small, native desktop image viewer written in Rust. It focuses on opening loca
 - Fit-to-window and 100% views
 - Rotate and horizontal/vertical flip without modifying the file.
 - Fullscreen mode
+- Escape key exits fullscreen mode
+- EXIF orientation handling
 - Clear file name, folder position, zoom level, image metadata, and load errors
 - Background image decoding, adjacent-image preloading, and a bounded image cache
 - Automatic GitHub release checks with remind-later and per-version ignore options
 - Currently supports only Windows
 
-Supported by default: BMP, GIF, ICO, JPEG, PNG/PNM, QOI, TIFF, and WebP.
+Supported by default: AVIF, BMP, DDS, OpenEXR, GIF, HDR, ICO, JPEG, PNG/PNM, QOI, SVG, TGA, TIFF, and WebP.
 
 ## Build and run
 
@@ -48,7 +50,7 @@ Install [Inno Setup 6](https://jrsoftware.org/isinfo.php), then run:
 .\scripts\build-installer.ps1
 ```
 
-The installer is written to `dist\SpectralViewer-Setup-0.2.0.exe`. It installs per user without requiring administrator access. Spectral Viewer is registered as an available **Open with** and Default Apps candidate for supported image types without changing the user's defaults. During installation, users can optionally add a separate **Open with Spectral Viewer** context-menu command. The final installer page includes a checkbox to launch Spectral Viewer.
+The installer is written to `dist\SpectralViewer-Setup-0.3.0.exe`. It installs per user without requiring administrator access. Spectral Viewer is registered as an available **Open with** and Default Apps candidate for supported image types without changing the user's defaults. During installation, users can optionally add a separate **Open with Spectral Viewer** context-menu command. The final installer page includes a checkbox to launch Spectral Viewer.
 
 The Windows application and installer icon is sourced from `assets\icon.ico`.
 
@@ -73,6 +75,7 @@ Verify the install, context-menu task, and uninstall behavior:
 | Flip horizontally / vertically | `H` / `V` |
 | Toggle smooth / nearest-neighbor scaling | `S` |
 | Toggle fullscreen | `F11` |
+| Exit fullscreen | `Esc` |
 
 ## Test
 
@@ -80,4 +83,4 @@ Verify the install, context-menu task, and uninstall behavior:
 cargo test
 ```
 
-AVIF, network loading, editing, update checks, and platform-specific integrations are intentionally outside the default build.
+Building AVIF support from source on Windows requires NASM 2.x and Perl. Network loading and editing are intentionally outside the default build.

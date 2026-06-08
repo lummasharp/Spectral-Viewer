@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$installer = Join-Path $projectRoot "dist\SpectralViewer-Setup-0.2.0.exe"
+$installer = Join-Path $projectRoot "dist\SpectralViewer-Setup-0.3.0.exe"
 $installDir = Join-Path $env:TEMP "SpectralViewerInstallerTest-$PID"
 $uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{E8403079-5B8A-47CE-AF70-315DF3322B98}_is1"
 $pngKey = "HKCU:\Software\Classes\SystemFileAssociations\.png\shell\SpectralViewer"

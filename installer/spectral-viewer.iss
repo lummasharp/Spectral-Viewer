@@ -1,5 +1,5 @@
 #define AppName "Spectral Viewer"
-#define AppVersion "0.2.0"
+#define AppVersion "0.3.0"
 #define AppPublisher "Spectral Viewer"
 #define AppExeName "spectral-viewer.exe"
 
@@ -58,6 +58,12 @@ Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".tif"; ValueData: ""
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".tiff"; ValueData: ""
 Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".webp"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".avif"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".dds"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".exr"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".hdr"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".svg"; ValueData: ""
+Root: HKCU; Subkey: "Software\Classes\Applications\{#AppExeName}\SupportedTypes"; ValueType: string; ValueName: ".tga"; ValueData: ""
 
 Root: HKCU; Subkey: "Software\Classes\SpectralViewer.Image"; ValueType: string; ValueName: ""; ValueData: "Spectral Viewer Image"; Flags: uninsdeletekey
 Root: HKCU; Subkey: "Software\Classes\SpectralViewer.Image\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: """{app}\{#AppExeName}"""
@@ -95,6 +101,12 @@ Root: HKCU; Subkey: "Software\Spectral Viewer\Capabilities\FileAssociations"; Va
 Root: HKCU; Subkey: "Software\Spectral Viewer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".tif"; ValueData: "SpectralViewer.Image"
 Root: HKCU; Subkey: "Software\Spectral Viewer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".tiff"; ValueData: "SpectralViewer.Image"
 Root: HKCU; Subkey: "Software\Spectral Viewer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".webp"; ValueData: "SpectralViewer.Image"
+Root: HKCU; Subkey: "Software\Spectral Viewer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".avif"; ValueData: "SpectralViewer.Image"
+Root: HKCU; Subkey: "Software\Spectral Viewer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".dds"; ValueData: "SpectralViewer.Image"
+Root: HKCU; Subkey: "Software\Spectral Viewer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".exr"; ValueData: "SpectralViewer.Image"
+Root: HKCU; Subkey: "Software\Spectral Viewer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".hdr"; ValueData: "SpectralViewer.Image"
+Root: HKCU; Subkey: "Software\Spectral Viewer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".svg"; ValueData: "SpectralViewer.Image"
+Root: HKCU; Subkey: "Software\Spectral Viewer\Capabilities\FileAssociations"; ValueType: string; ValueName: ".tga"; ValueData: "SpectralViewer.Image"
 Root: HKCU; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueName: "{#AppName}"; ValueData: "Software\Spectral Viewer\Capabilities"; Flags: uninsdeletevalue
 
 ; Optional separate context-menu command.

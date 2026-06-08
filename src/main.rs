@@ -13,6 +13,7 @@ fn main() -> eframe::Result {
         .with_app_id("spectral-viewer")
         .with_inner_size([1000.0, 700.0])
         .with_min_inner_size([480.0, 320.0])
+        .with_visible(false)
         .with_drag_and_drop(true);
     if let Some(icon) = app_icon() {
         viewport = viewport.with_icon(icon);
