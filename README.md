@@ -1,4 +1,4 @@
-# Spectral Viewer v0.3.1
+# Spectral Viewer v0.3.2
 
 A small, native desktop image viewer written in Rust. It focuses on opening local images quickly and browsing a folder without editing tools.
 
@@ -13,6 +13,8 @@ A small, native desktop image viewer written in Rust. It focuses on opening loca
 - Fit-to-window and 100% views
 - Rotate and horizontal/vertical flip without modifying the file.
 - Fullscreen mode
+- Fullscreen hides the on-screen controls for distraction-free viewing
+- Double-click the displayed image to enter or leave fullscreen
 - Escape key exits fullscreen mode
 - EXIF orientation handling
 - Clear file name, folder position, zoom level, image metadata, and load errors
@@ -52,7 +54,7 @@ Install [Inno Setup 6](https://jrsoftware.org/isinfo.php), then run:
 .\scripts\build-installer.ps1
 ```
 
-The installer is written to `dist\SpectralViewer-Setup-0.3.0.exe`. It installs per user without requiring administrator access. Spectral Viewer is registered as an available **Open with** and Default Apps candidate for supported image types without changing the user's defaults. During installation, users can optionally add a separate **Open with Spectral Viewer** context-menu command. The final installer page includes a checkbox to launch Spectral Viewer.
+The installer is written to `dist\SpectralViewer-Setup-0.3.2.exe`. It installs per user without requiring administrator access. Spectral Viewer is registered as an available **Open with** and Default Apps candidate for supported image types without changing the user's defaults. During installation, users can optionally add a separate **Open with Spectral Viewer** context-menu command. The final installer page includes a checkbox to launch Spectral Viewer.
 
 The Windows application and installer icon is sourced from `assets\icon.ico`.
 
@@ -71,12 +73,12 @@ Verify the install, context-menu task, and uninstall behavior:
 | First / last | `Home` / `End` |
 | Zoom | Mouse wheel |
 | Pan | Click and drag |
-| Fit to window | `F` or double-click |
+| Fit to window | `F` |
 | Actual size | `Ctrl+0` |
 | Rotate clockwise | `R` |
 | Flip horizontally / vertically | `H` / `V` |
 | Toggle smooth / nearest-neighbor scaling | `S` |
-| Toggle fullscreen | `F11` |
+| Toggle fullscreen | `F11` or double-click the image |
 | Exit fullscreen | `Esc` |
 
 ## Test

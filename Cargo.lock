@@ -3029,7 +3029,7 @@ dependencies = [
 
 [[package]]
 name = "spectral-viewer"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "avif-decode",
  "eframe",

@@ -497,10 +497,6 @@ impl ViewerApp {
             self.fit_requested = false;
             ctx.request_repaint();
         }
-        if response.double_clicked() {
-            self.fit_requested = true;
-        }
-
         if response.hovered() {
             let zoom_factor = ctx.input(|input| wheel_zoom_factor(&input.events));
             if zoom_factor != 1.0 {
@@ -521,8 +517,15 @@ impl ViewerApp {
                 image_min
             };
             let image_rect = Rect::from_min_size(image_min, display_size);
+            let toggle_fullscreen = response.double_clicked()
+                && ctx
+                    .input(|input| input.pointer.interact_pos())
+                    .is_some_and(|position| image_rect.contains(position));
             paint_checkerboard(&painter, image_rect, canvas);
             paint_transformed_image(&painter, texture, image_rect, self.transform);
+            if toggle_fullscreen {
+                self.toggle_fullscreen(ctx);
+            }
         } else if self.loading {
             painter.text(
                 canvas.center(),
@@ -718,7 +721,9 @@ impl eframe::App for ViewerApp {
         self.handle_shortcuts(&ctx);
         let canvas = ui.max_rect();
         self.image_panel(&ctx, ui, canvas);
-        self.overlay_controls(&ctx, ui, canvas);
+        if !self.preferences.fullscreen {
+            self.overlay_controls(&ctx, ui, canvas);
+        }
         self.update_prompt(&ctx);
     }
 
