@@ -8,7 +8,10 @@
       name="description"
       content="Spectral Viewer is a lightweight and minimal image viewer for Windows."
     />
-    <meta name="theme-color" content="#63d5f4" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#111214" media="(prefers-color-scheme: dark)" />
+    <link rel="canonical" href="https://lummasharp.github.io/Spectral-Viewer/" />
     <link rel="icon" href="assets/icon.ico" sizes="any" />
     <link rel="stylesheet" href="styles.css" />
     <script type="application/ld+json">
@@ -33,109 +36,165 @@
         </a>
         <h1>A lightweight and minimal image viewer.</h1>
         <p class="lede">
-          A recreation from
+          A successor to
           <a href="https://github.com/ArturKovacs/emulsion">Emulsion</a>,
-          after the original project was discontinued.
+          built after the original project was discontinued.
         </p>
         <p class="actions">
-          <a href="https://github.com/lummasharp/Spectral-Viewer/releases/latest"
-            >Download</a
+          <a
+            class="primary"
+            data-download
+            href="https://github.com/lummasharp/Spectral-Viewer/releases/latest"
+            >Download for Windows</a
           >
           <a href="https://github.com/lummasharp/Spectral-Viewer">View on GitHub</a>
         </p>
+        <p class="release-note" data-release-note hidden></p>
       </header>
 
-      <hr class="divider" />
+      <img
+        class="screenshot"
+        src="assets/ui.png"
+        alt="Spectral Viewer showing an image with its file name, folder position, zoom level and bottom toolbar"
+      />
 
       <section id="overview" class="section">
         <h2>Overview</h2>
         <p>
-          Spectral Viewer focuses on opening local images quickly and browsing
-          a folder without editor-style clutter.
+          Spectral Viewer opens local images quickly and lets you browse a
+          folder without editor-style clutter.
         </p>
         <div class="media-block">
           <video
             class="media-video"
             src="media/main.mp4"
-            autoplay
+            poster="media/main.jpg"
+            aria-label="Opening an image, zooming, panning, switching scaling and entering fullscreen"
             muted
             loop
             playsinline
+            preload="none"
           ></video>
-          <p>Open an image, zoom, pan, switch scaling, and even enter fullscreen.</p>
+          <p>Open an image, zoom, pan, switch scaling, and go fullscreen.</p>
         </div>
+      </section>
+
+      <section id="features" class="section">
+        <h2>Features</h2>
+        <ul class="feature-list">
+          <li>Browse every supported image in the same folder</li>
+          <li>Smooth zoom centred on the cursor, plus click-drag panning</li>
+          <li>Smooth or nearest-neighbour scaling for pixel art</li>
+          <li>Rotate and flip without changing the file</li>
+          <li>Animated GIF and WebP playback</li>
+          <li>Copy to clipboard, show in Explorer, or move to the Recycle Bin</li>
+          <li>Fullscreen with the controls hidden</li>
+          <li>EXIF orientation and image details (size, format, colour mode)</li>
+          <li>Background decoding and preloading of neighbouring images</li>
+          <li>Automatic updates from GitHub releases</li>
+        </ul>
       </section>
 
       <section id="showcase" class="section">
         <h2>Showcase</h2>
 
         <div class="feature">
-          <h3>Pixel Art Friendly</h3>
-          <p>
-            Switch between smooth scaling and nearest-neighbor scaling.
-          </p>
+          <h3>Pixel art friendly</h3>
+          <p>Switch between smooth and nearest-neighbour scaling.</p>
           <video
-            class="media-video short"
+            class="media-video"
             src="media/pixel.mp4"
-            autoplay
+            poster="media/pixel.jpg"
+            aria-label="Toggling between smooth and nearest-neighbour scaling on pixel art"
             muted
             loop
             playsinline
+            preload="none"
           ></video>
         </div>
 
         <div class="feature">
-          <h3>Rotate and Flip</h3>
+          <h3>Rotate and flip</h3>
           <p>
             Rotate the image and flip it horizontally or vertically without
             changing the file.
           </p>
           <video
-            class="media-video short"
+            class="media-video"
             src="media/rotate.mp4"
-            autoplay
+            poster="media/rotate.jpg"
+            aria-label="Rotating and flipping an image"
             muted
             loop
             playsinline
+            preload="none"
           ></video>
         </div>
 
         <div class="feature">
-          <h3>Cursor Anchored Zoom</h3>
+          <h3>Cursor-anchored zoom</h3>
           <p>
-           Zooms towards the cursor position, so you can easily zoom into a specific area.
+            Zoom towards the cursor so you can get into a specific area
+            quickly.
           </p>
           <video
-            class="media-video short"
+            class="media-video"
             src="media/anchor.mp4"
-            autoplay
+            poster="media/anchor.jpg"
+            aria-label="Zooming into the area under the mouse cursor"
             muted
             loop
             playsinline
+            preload="none"
           ></video>
         </div>
       </section>
 
+      <section id="controls" class="section">
+        <h2>Controls</h2>
+        <div class="table-wrap">
+          <table>
+            <tbody>
+              <tr><td>Open image</td><td><kbd>Ctrl</kbd> + <kbd>O</kbd> or drag and drop</td></tr>
+              <tr><td>Previous / next</td><td><kbd>←</kbd> <kbd>→</kbd>, <kbd>Page Up</kbd> <kbd>Page Down</kbd>, or mouse back / forward</td></tr>
+              <tr><td>First / last</td><td><kbd>Home</kbd> / <kbd>End</kbd></td></tr>
+              <tr><td>Zoom</td><td>Mouse wheel, <kbd>+</kbd> / <kbd>-</kbd></td></tr>
+              <tr><td>Pan</td><td>Click and drag</td></tr>
+              <tr><td>Fit to window / actual size</td><td><kbd>F</kbd> / <kbd>Ctrl</kbd> + <kbd>0</kbd></td></tr>
+              <tr><td>Rotate clockwise / counter-clockwise</td><td><kbd>R</kbd> / <kbd>Shift</kbd> + <kbd>R</kbd></td></tr>
+              <tr><td>Flip horizontally / vertically</td><td><kbd>H</kbd> / <kbd>V</kbd></td></tr>
+              <tr><td>Smooth / nearest-neighbour scaling</td><td><kbd>S</kbd></td></tr>
+              <tr><td>Copy image</td><td><kbd>Ctrl</kbd> + <kbd>C</kbd></td></tr>
+              <tr><td>Show in Explorer</td><td><kbd>E</kbd></td></tr>
+              <tr><td>Move to Recycle Bin</td><td><kbd>Delete</kbd></td></tr>
+              <tr><td>Fullscreen</td><td><kbd>F11</kbd> or double-click; <kbd>Esc</kbd> to leave</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
       <section id="details" class="section">
-        <h2>Details</h2>
+        <h2>Formats</h2>
         <p>
-          Supported by default: AVIF, BMP, DDS, OpenEXR, GIF, HDR, ICO, JPEG,
-          PNG, PNM, QOI, SVG, TGA, TIFF, and WebP.
-        </p>
-        <p>
-          Automatically updates to the latest GitHub release.
+          AVIF, BMP, DDS, OpenEXR, GIF, HDR, ICO, JPEG, PNG, PNM, QOI, SVG,
+          TGA, TIFF, and WebP.
         </p>
       </section>
 
       <section id="download" class="section">
         <h2>Download</h2>
         <p>
-          Get the latest Windows release from the GitHub releases page.
+          The installer runs per user without administrator access and keeps
+          itself up to date.
         </p>
         <p class="actions">
-          <a href="https://github.com/lummasharp/Spectral-Viewer/releases/latest"
-            >Download latest release</a
+          <a
+            class="primary"
+            data-download
+            href="https://github.com/lummasharp/Spectral-Viewer/releases/latest"
+            >Download for Windows</a
           >
+          <a href="https://github.com/lummasharp/Spectral-Viewer/releases">All releases</a>
           <a href="https://github.com/lummasharp/Spectral-Viewer">Source code</a>
         </p>
       </section>
@@ -145,5 +204,6 @@
         <p>Windows only.</p>
       </footer>
     </main>
+    <script src="site.js" defer></script>
   </body>
 </html>

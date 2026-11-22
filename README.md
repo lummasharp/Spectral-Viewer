@@ -1,4 +1,4 @@
-# Spectral Viewer v0.3.2
+# Spectral Viewer v0.4.0
 
 A small, native desktop image viewer written in Rust. It focuses on opening local images quickly and browsing a folder without editing tools.
 
@@ -12,6 +12,9 @@ A small, native desktop image viewer written in Rust. It focuses on opening loca
 - Switchable smooth and nearest-neighbor image scaling
 - Fit-to-window and 100% views
 - Rotate and horizontal/vertical flip without modifying the file.
+- Animated GIF and WebP playback
+- Copy to clipboard, show in Explorer, and move to the Recycle Bin
+- Toolbar scales down to fit narrow windows
 - Fullscreen mode
 - Fullscreen hides the on-screen controls for distraction-free viewing
 - Double-click the displayed image to enter or leave fullscreen
@@ -54,7 +57,7 @@ Install [Inno Setup 6](https://jrsoftware.org/isinfo.php), then run:
 .\scripts\build-installer.ps1
 ```
 
-The installer is written to `dist\SpectralViewer-Setup-0.3.2.exe`. It installs per user without requiring administrator access. Spectral Viewer is registered as an available **Open with** and Default Apps candidate for supported image types without changing the user's defaults. During installation, users can optionally add a separate **Open with Spectral Viewer** context-menu command. The final installer page includes a checkbox to launch Spectral Viewer.
+The installer is written to `dist\SpectralViewer-Setup-0.4.0.exe`. It installs per user without requiring administrator access. Spectral Viewer is registered as an available **Open with** and Default Apps candidate for supported image types without changing the user's defaults. During installation, users can optionally add a separate **Open with Spectral Viewer** context-menu command. The final installer page includes a checkbox to launch Spectral Viewer.
 
 The Windows application and installer icon is sourced from `assets\icon.ico`.
 
@@ -69,15 +72,18 @@ Verify the install, context-menu task, and uninstall behavior:
 | Action | Control |
 | --- | --- |
 | Open image | `Ctrl+O` |
-| Previous / next | `Left` / `Right` or `Page Up` / `Page Down` |
+| Previous / next | `Left` / `Right`, `Page Up` / `Page Down`, or mouse back / forward |
 | First / last | `Home` / `End` |
-| Zoom | Mouse wheel |
+| Zoom | Mouse wheel or `+` / `-` |
 | Pan | Click and drag |
 | Fit to window | `F` |
 | Actual size | `Ctrl+0` |
-| Rotate clockwise | `R` |
+| Rotate clockwise / counter-clockwise | `R` / `Shift+R` |
 | Flip horizontally / vertically | `H` / `V` |
 | Toggle smooth / nearest-neighbor scaling | `S` |
+| Copy image to clipboard | `Ctrl+C` |
+| Show in Explorer | `E` |
+| Move to Recycle Bin | `Delete` |
 | Toggle fullscreen | `F11` or double-click the image |
 | Exit fullscreen | `Esc` |
 

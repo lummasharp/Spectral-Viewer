@@ -13,12 +13,16 @@ use std::{
 };
 
 use eframe::egui::{
-    self, Align2, Color32, ColorImage, Event, FontId, Key, Mesh, MouseWheelUnit, Pos2, Rect, Sense,
-    Shape, Stroke, TextureHandle, TextureOptions, Vec2, ViewportCommand, pos2, vec2,
+    self, Align2, Color32, ColorImage, Event, FontId, Key, Mesh, MouseWheelUnit, PointerButton,
+    Pos2, Rect, RichText, Sense, Shape, Stroke, TextureHandle, TextureOptions, Vec2,
+    ViewportCommand, pos2, vec2,
 };
 use eframe::emath::GuiRounding;
 use eframe::epaint::Vertex;
-use image::{ColorType, DynamicImage, ImageFormat, ImageReader};
+use image::{
+    AnimationDecoder, ColorType, DynamicImage, ImageFormat, ImageReader,
+    codecs::{gif::GifDecoder, webp::WebPDecoder},
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -33,6 +37,12 @@ const CHECKER_SIZE: f32 = 12.0;
 const STORAGE_KEY: &str = "spectral-viewer-preferences";
 const CACHE_MAX_BYTES: usize = 256 * 1024 * 1024;
 const CACHE_MAX_IMAGES: usize = 16;
+const KEY_ZOOM_STEP: f32 = 1.25;
+const TOOLBAR_WIDTH: f32 = 514.0;
+const TOOLBAR_MARGIN: f32 = 12.0;
+// Browsers treat GIF delays under 20 ms as 100 ms; match them so old GIFs don't race.
+const MIN_FRAME_DELAY: Duration = Duration::from_millis(20);
+const DEFAULT_FRAME_DELAY: Duration = Duration::from_millis(100);
 const IMAGE_EXTENSIONS: &[&str] = &[
     "avif", "bmp", "dds", "exr", "gif", "hdr", "ico", "jpeg", "jpg", "pbm", "pgm", "png", "pnm",
     "ppm", "qoi", "svg", "tga", "tif", "tiff", "webp",
@@ -80,8 +90,15 @@ enum UpdateInstallState {
     Failed(String),
 }
 
+struct Frame {
+    image: Arc<ColorImage>,
+    delay: Duration,
+}
+
+type Frames = Arc<[Frame]>;
+
 struct DecodedImage {
-    pixels: Arc<ColorImage>,
+    frames: Frames,
     size: Vec2,
     bytes: usize,
     metadata: ImageMetadata,
@@ -132,10 +149,17 @@ struct ImageCache {
 }
 
 impl ImageCache {
-    fn get(&mut self, path: &Path) -> Option<Arc<ColorImage>> {
-        let image = self.images.get(path)?.pixels.clone();
+    fn get(&mut self, path: &Path) -> Option<Frames> {
+        let frames = self.images.get(path)?.frames.clone();
         self.touch(path);
-        Some(image)
+        Some(frames)
+    }
+
+    fn remove(&mut self, path: &Path) {
+        if let Some(removed) = self.images.remove(path) {
+            self.bytes -= removed.bytes;
+        }
+        self.recently_used.retain(|item| item != path);
     }
 
     fn insert(&mut self, path: PathBuf, image: DecodedImage) {
@@ -175,6 +199,9 @@ impl ImageCache {
 
 pub struct ViewerApp {
     texture: Option<TextureHandle>,
+    frames: Frames,
+    frame_index: usize,
+    next_frame_time: f64,
     image_size: Vec2,
     current_path: Option<PathBuf>,
     folder_images: Vec<PathBuf>,
@@ -200,6 +227,9 @@ pub struct ViewerApp {
 impl ViewerApp {
     pub fn new(cc: &eframe::CreationContext<'_>, initial_path: Option<PathBuf>) -> Self {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
+        // Ctrl +/- zoom the image, not the whole UI.
+        cc.egui_ctx
+            .options_mut(|options| options.zoom_with_keyboard = false);
         let preferences: Preferences = cc
             .storage
             .and_then(|storage| eframe::get_value(storage, STORAGE_KEY))
@@ -215,6 +245,9 @@ impl ViewerApp {
         let (update_install_sender, update_install_results) = mpsc::channel();
         let mut app = Self {
             texture: None,
+            frames: Frames::from([]),
+            frame_index: 0,
+            next_frame_time: 0.0,
             image_size: Vec2::ZERO,
             current_path: None,
             folder_images: Vec::new(),
@@ -259,6 +292,7 @@ impl ViewerApp {
         self.folder_images = images_in_same_folder(&path);
         self.current_index = self.folder_images.iter().position(|item| item == &path);
         self.texture = None;
+        self.frames = Frames::from([]);
         self.image_size = Vec2::ZERO;
         self.image_metadata = None;
         self.zoom = 1.0;
@@ -269,8 +303,8 @@ impl ViewerApp {
         self.loading = true;
         ctx.send_viewport_cmd(ViewportCommand::Title(self.window_title()));
 
-        if let Some(image) = self.cache.get(&path) {
-            self.install_image(ctx, &path, image);
+        if let Some(frames) = self.cache.get(&path) {
+            self.install_image(ctx, &path, frames);
         } else if self.decoder.foreground.send(path).is_err() {
             self.loading = false;
             self.error = Some("The image decoder stopped unexpectedly".to_owned());
@@ -278,20 +312,136 @@ impl ViewerApp {
         self.preload_adjacent();
     }
 
-    fn install_image(&mut self, ctx: &egui::Context, path: &Path, image: Arc<ColorImage>) {
+    fn install_image(&mut self, ctx: &egui::Context, path: &Path, frames: Frames) {
+        let Some(first) = frames.first() else {
+            return;
+        };
         self.image_size = self
             .cache
             .size(path)
-            .unwrap_or_else(|| vec2(image.width() as f32, image.height() as f32));
+            .unwrap_or_else(|| vec2(first.image.width() as f32, first.image.height() as f32));
         self.image_metadata = self.cache.metadata(path);
-        let options = if self.preferences.nearest_neighbor {
+        self.texture = Some(ctx.load_texture(
+            path.to_string_lossy(),
+            first.image.clone(),
+            self.texture_options(),
+        ));
+        self.frame_index = 0;
+        self.next_frame_time = ctx.input(|input| input.time) + first.delay.as_secs_f64();
+        self.frames = frames;
+        self.loading = false;
+        self.error = None;
+    }
+
+    fn texture_options(&self) -> TextureOptions {
+        if self.preferences.nearest_neighbor {
             TextureOptions::NEAREST
         } else {
             TextureOptions::LINEAR
-        };
-        self.texture = Some(ctx.load_texture(path.to_string_lossy(), image, options));
+        }
+    }
+
+    fn advance_animation(&mut self, ctx: &egui::Context) {
+        if self.frames.len() < 2 {
+            return;
+        }
+        let now = ctx.input(|input| input.time);
+        if now >= self.next_frame_time {
+            self.frame_index = (self.frame_index + 1) % self.frames.len();
+            let frame = &self.frames[self.frame_index];
+            let options = self.texture_options();
+            if let Some(texture) = &mut self.texture {
+                texture.set(frame.image.clone(), options);
+            }
+            self.next_frame_time += frame.delay.as_secs_f64();
+            // After a stall (minimized window, slow decode) resync instead of fast-forwarding.
+            if self.next_frame_time < now {
+                self.next_frame_time = now + frame.delay.as_secs_f64();
+            }
+        }
+        ctx.request_repaint_after(Duration::from_secs_f64(
+            (self.next_frame_time - now).max(0.0),
+        ));
+    }
+
+    fn current_frame(&self) -> Option<&Frame> {
+        self.frames.get(self.frame_index)
+    }
+
+    fn clear_image(&mut self, ctx: &egui::Context) {
+        self.current_path = None;
+        self.folder_images.clear();
+        self.current_index = None;
+        self.texture = None;
+        self.frames = Frames::from([]);
+        self.image_metadata = None;
         self.loading = false;
         self.error = None;
+        ctx.send_viewport_cmd(ViewportCommand::Title(self.window_title()));
+    }
+
+    fn copy_to_clipboard(&self, ctx: &egui::Context) {
+        if let Some(frame) = self.current_frame() {
+            ctx.copy_image((*frame.image).clone());
+        }
+    }
+
+    fn show_in_folder(&self) {
+        let Some(path) = &self.current_path else {
+            return;
+        };
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            // explorer wants the quotes after the comma, so build the argument by hand.
+            let _ = Command::new("explorer")
+                .raw_arg(format!("/select,\"{}\"", path.display()))
+                .spawn();
+        }
+        #[cfg(not(windows))]
+        if let Some(parent) = path.parent() {
+            let _ = Command::new("xdg-open").arg(parent).spawn();
+        }
+    }
+
+    fn delete_current(&mut self, ctx: &egui::Context) {
+        let Some(path) = self.current_path.clone() else {
+            return;
+        };
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let confirmed = rfd::MessageDialog::new()
+            .set_title("Delete image")
+            .set_description(format!("Move \"{name}\" to the Recycle Bin?"))
+            .set_buttons(rfd::MessageButtons::YesNo)
+            .set_level(rfd::MessageLevel::Warning)
+            .show()
+            == rfd::MessageDialogResult::Yes;
+        if !confirmed {
+            return;
+        }
+        if let Err(error) = trash::delete(&path) {
+            rfd::MessageDialog::new()
+                .set_title("Delete image")
+                .set_description(format!("Could not delete \"{name}\": {error}"))
+                .set_level(rfd::MessageLevel::Error)
+                .show();
+            return;
+        }
+
+        self.cache.remove(&path);
+        let index = self.current_index.unwrap_or(0);
+        self.folder_images.retain(|item| item != &path);
+        let next = self
+            .folder_images
+            .get(index.min(self.folder_images.len().saturating_sub(1)))
+            .cloned();
+        match next {
+            Some(next) => self.open_path(ctx, next),
+            None => self.clear_image(ctx),
+        }
     }
 
     fn poll_decoder(&mut self, ctx: &egui::Context) {
@@ -299,10 +449,10 @@ impl ViewerApp {
             self.pending_preloads.remove(&decoded.path);
             match decoded.result {
                 Ok(image) => {
-                    let pixels = image.pixels.clone();
+                    let frames = image.frames.clone();
                     self.cache.insert(decoded.path.clone(), image);
                     if self.current_path.as_deref() == Some(decoded.path.as_path()) {
-                        self.install_image(ctx, &decoded.path, pixels);
+                        self.install_image(ctx, &decoded.path, frames);
                     }
                 }
                 Err(error) if self.current_path.as_deref() == Some(decoded.path.as_path()) => {
@@ -402,6 +552,10 @@ impl ViewerApp {
         self.transform.quarter_turns = (self.transform.quarter_turns + 1) % 4;
     }
 
+    fn rotate_counterclockwise(&mut self) {
+        self.transform.quarter_turns = (self.transform.quarter_turns + 3) % 4;
+    }
+
     fn toggle_fullscreen(&mut self, ctx: &egui::Context) {
         self.preferences.fullscreen = !self.preferences.fullscreen;
         ctx.send_viewport_cmd(ViewportCommand::Fullscreen(self.preferences.fullscreen));
@@ -409,11 +563,13 @@ impl ViewerApp {
 
     fn toggle_scaling(&mut self, ctx: &egui::Context) {
         self.preferences.nearest_neighbor = !self.preferences.nearest_neighbor;
-        if let Some(path) = self.current_path.clone()
-            && let Some(image) = self.cache.get(&path)
+        let options = self.texture_options();
+        if let Some(frame) = self.frames.get(self.frame_index)
+            && let Some(texture) = &mut self.texture
         {
-            self.install_image(ctx, &path, image);
+            texture.set(frame.image.clone(), options);
         }
+        ctx.request_repaint();
     }
 
     fn zoom_by(&mut self, factor: f32, focus: Pos2, canvas: Rect) {
@@ -424,16 +580,53 @@ impl ViewerApp {
         self.fit_requested = false;
     }
 
+    /// Keyboard zoom keeps the point at the window centre fixed.
+    fn zoom_centered(&mut self, factor: f32) {
+        let old_zoom = self.zoom;
+        self.zoom = (self.zoom * factor).clamp(MIN_ZOOM, MAX_ZOOM);
+        self.pan *= self.zoom / old_zoom;
+        self.fit_requested = false;
+    }
+
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         if ctx.input(|input| input.key_pressed(Key::O) && input.modifiers.command) {
             self.open_dialog(ctx);
         }
-        if ctx.input(|input| input.key_pressed(Key::ArrowRight) || input.key_pressed(Key::PageDown))
-        {
+        if ctx.input(|input| {
+            input.key_pressed(Key::ArrowRight)
+                || input.key_pressed(Key::PageDown)
+                || input.pointer.button_pressed(PointerButton::Extra2)
+        }) {
             self.navigate(ctx, 1);
         }
-        if ctx.input(|input| input.key_pressed(Key::ArrowLeft) || input.key_pressed(Key::PageUp)) {
+        if ctx.input(|input| {
+            input.key_pressed(Key::ArrowLeft)
+                || input.key_pressed(Key::PageUp)
+                || input.pointer.button_pressed(PointerButton::Extra1)
+        }) {
             self.navigate(ctx, -1);
+        }
+        if ctx.input(|input| input.key_pressed(Key::Plus) || input.key_pressed(Key::Equals)) {
+            self.zoom_centered(KEY_ZOOM_STEP);
+        }
+        if ctx.input(|input| input.key_pressed(Key::Minus)) {
+            self.zoom_centered(1.0 / KEY_ZOOM_STEP);
+        }
+        // egui turns Ctrl+C into Event::Copy before it reaches key events.
+        if ctx.input(|input| {
+            input
+                .events
+                .iter()
+                .any(|event| matches!(event, Event::Copy))
+                || (input.key_pressed(Key::C) && input.modifiers.command)
+        }) {
+            self.copy_to_clipboard(ctx);
+        }
+        if ctx.input(|input| input.key_pressed(Key::E)) {
+            self.show_in_folder();
+        }
+        if ctx.input(|input| input.key_pressed(Key::Delete)) {
+            self.delete_current(ctx);
         }
         if ctx.input(|input| input.key_pressed(Key::Home)) && !self.folder_images.is_empty() {
             self.open_path(ctx, self.folder_images[0].clone());
@@ -453,8 +646,14 @@ impl ViewerApp {
         if ctx.input(|input| input.key_pressed(Key::Escape)) && self.preferences.fullscreen {
             self.toggle_fullscreen(ctx);
         }
-        if ctx.input(|input| input.key_pressed(Key::R)) {
-            self.rotate_clockwise();
+        if let Some(shift) =
+            ctx.input(|input| input.key_pressed(Key::R).then_some(input.modifiers.shift))
+        {
+            if shift {
+                self.rotate_counterclockwise();
+            } else {
+                self.rotate_clockwise();
+            }
         }
         if ctx.input(|input| input.key_pressed(Key::H)) {
             self.transform.flip_horizontal = !self.transform.flip_horizontal;
@@ -607,7 +806,9 @@ impl ViewerApp {
             );
         }
 
-        let bar_size = vec2(514.0, 42.0);
+        // Shrink the bar to fit narrow windows instead of letting buttons fall off the edges.
+        let scale = toolbar_scale(canvas.width());
+        let bar_size = vec2(TOOLBAR_WIDTH * scale, 42.0);
         let bar = Rect::from_center_size(canvas.center_bottom() - vec2(0.0, 28.0), bar_size);
         painter.rect_filled(bar, 10.0, Color32::from_black_alpha(175));
 
@@ -628,13 +829,14 @@ impl ViewerApp {
             ">",
         ];
         let widths = [54.0, 32.0, 42.0, 42.0, 56.0, 54.0, 54.0, 72.0, 32.0];
-        let mut x = bar.left() + 10.0;
+        let mut x = bar.left() + 10.0 * scale;
         for (index, (label, width)) in labels.into_iter().zip(widths).enumerate() {
+            let width = width * scale;
             let rect = Rect::from_min_size(pos2(x, bar.top() + 6.0), vec2(width, 30.0));
             let enabled = !matches!(index, 1 | 8) || !self.folder_images.is_empty();
             let response = ui.put(
                 rect,
-                egui::Button::new(label)
+                egui::Button::new(RichText::new(label).size(14.0 * scale))
                     .fill(Color32::TRANSPARENT)
                     .stroke(Stroke::NONE)
                     .sense(if enabled {
@@ -661,7 +863,7 @@ impl ViewerApp {
                     _ => {}
                 }
             }
-            x += width + 2.0;
+            x += width + 2.0 * scale;
         }
     }
 
@@ -719,6 +921,7 @@ impl eframe::App for ViewerApp {
         self.poll_update_check();
         self.poll_update_install(&ctx);
         self.handle_shortcuts(&ctx);
+        self.advance_animation(&ctx);
         let canvas = ui.max_rect();
         self.image_panel(&ctx, ui, canvas);
         if !self.preferences.fullscreen {
@@ -909,6 +1112,9 @@ fn load_color_image(path: &Path) -> Result<DecodedImage, String> {
         .with_guessed_format()
         .map_err(|error| error.to_string())?;
     let format = reader.format();
+    if let Some(animated) = format.and_then(|format| load_animation(path, format, file_size)) {
+        return Ok(animated);
+    }
     let decoded = apply_exif_orientation(
         reader.decode().map_err(|error| error.to_string())?,
         orientation,
@@ -924,7 +1130,7 @@ fn load_color_image(path: &Path) -> Result<DecodedImage, String> {
         .ok_or("image dimensions are too large")?;
     let color_image = ColorImage::from_rgba_unmultiplied([width, height], rgba.as_raw());
     Ok(DecodedImage {
-        pixels: Arc::new(color_image),
+        frames: still_frame(color_image),
         size: vec2(width as f32, height as f32),
         bytes,
         metadata: ImageMetadata {
@@ -934,6 +1140,74 @@ fn load_color_image(path: &Path) -> Result<DecodedImage, String> {
             color_mode,
             file_size,
         },
+    })
+}
+
+fn still_frame(image: ColorImage) -> Frames {
+    Frames::from([Frame {
+        image: Arc::new(image),
+        delay: Duration::ZERO,
+    }])
+}
+
+/// Decodes every frame of an animated GIF or WebP. Returns `None` for still images,
+/// unsupported formats, decode errors and animations too large for the cache, so the
+/// caller falls back to a normal single-frame decode.
+fn load_animation(path: &Path, format: ImageFormat, file_size: u64) -> Option<DecodedImage> {
+    let reader = BufReader::new(fs::File::open(path).ok()?);
+    let frames = match format {
+        ImageFormat::Gif => GifDecoder::new(reader).ok()?.into_frames(),
+        ImageFormat::WebP => {
+            let decoder = WebPDecoder::new(reader).ok()?;
+            if !decoder.has_animation() {
+                return None;
+            }
+            decoder.into_frames()
+        }
+        _ => return None,
+    };
+
+    let mut decoded = Vec::new();
+    let mut bytes = 0usize;
+    for frame in frames {
+        let frame = frame.ok()?;
+        let (numer, denom) = frame.delay().numer_denom_ms();
+        let delay = Duration::from_millis(u64::from(numer / denom.max(1)));
+        let buffer = frame.into_buffer();
+        bytes = bytes.checked_add(buffer.as_raw().len())?;
+        // shortcut: oversized animations show only their first frame; stream frames if that matters.
+        if bytes > CACHE_MAX_BYTES {
+            return None;
+        }
+        let (width, height) = buffer.dimensions();
+        decoded.push(Frame {
+            image: Arc::new(ColorImage::from_rgba_unmultiplied(
+                [width as usize, height as usize],
+                buffer.as_raw(),
+            )),
+            delay: if delay < MIN_FRAME_DELAY {
+                DEFAULT_FRAME_DELAY
+            } else {
+                delay
+            },
+        });
+    }
+    if decoded.len() < 2 {
+        return None;
+    }
+
+    let [width, height] = decoded[0].image.size;
+    Some(DecodedImage {
+        size: vec2(width as f32, height as f32),
+        bytes,
+        metadata: ImageMetadata {
+            width,
+            height,
+            format: format!("{} ({} frames)", format_name(Some(format)), decoded.len()),
+            color_mode: "RGBA 8-bit".to_owned(),
+            file_size,
+        },
+        frames: decoded.into(),
     })
 }
 
@@ -1059,7 +1333,7 @@ fn decoded_from_rgba(
         return Err("decoded image buffer has an unexpected size".to_owned());
     }
     Ok(DecodedImage {
-        pixels: Arc::new(ColorImage::from_rgba_unmultiplied([width, height], &rgba)),
+        frames: still_frame(ColorImage::from_rgba_unmultiplied([width, height], &rgba)),
         size: vec2(width as f32, height as f32),
         bytes,
         metadata: ImageMetadata {
@@ -1190,6 +1464,10 @@ fn is_supported_extension(path: &Path) -> bool {
         })
 }
 
+fn toolbar_scale(canvas_width: f32) -> f32 {
+    ((canvas_width - TOOLBAR_MARGIN * 2.0) / TOOLBAR_WIDTH).clamp(0.5, 1.0)
+}
+
 fn wrapped_index(current: usize, direction: isize, len: usize) -> usize {
     (current as isize + direction).rem_euclid(len as isize) as usize
 }
@@ -1307,13 +1585,13 @@ mod tests {
         DecodedImage, GithubAsset, GithubRelease, ImageCache, ImageDecoder, Preferences,
         UpdateInstallState, ViewTransform, ViewerApp, apply_exif_orientation,
         available_update_from_release, checker_index, fit_zoom, format_file_size,
-        images_in_same_folder, is_supported_extension, transformed_size, transformed_uv,
-        unpremultiply_rgba, wheel_zoom_factor, wrapped_index,
+        images_in_same_folder, is_supported_extension, still_frame, toolbar_scale,
+        transformed_size, transformed_uv, unpremultiply_rgba, wheel_zoom_factor, wrapped_index,
     };
     use eframe::egui::{
         Color32, ColorImage, Event, Modifiers, MouseWheelUnit, TouchPhase, pos2, vec2,
     };
-    use std::{collections::HashSet, fs, path::Path, sync::Arc};
+    use std::{collections::HashSet, fs, path::Path};
 
     #[test]
     fn supported_extensions_are_case_insensitive() {
@@ -1401,6 +1679,9 @@ mod tests {
     fn rotation_preserves_zoom_pan_and_fit_state() {
         let mut app = ViewerApp {
             texture: None,
+            frames: super::Frames::from([]),
+            frame_index: 0,
+            next_frame_time: 0.0,
             image_size: vec2(640.0, 480.0),
             current_path: None,
             folder_images: Vec::new(),
@@ -1429,6 +1710,56 @@ mod tests {
         assert_eq!(app.zoom, 3.5);
         assert_eq!(app.pan, vec2(120.0, -45.0));
         assert!(!app.fit_requested);
+
+        app.rotate_counterclockwise();
+        app.rotate_counterclockwise();
+        assert_eq!(app.transform.quarter_turns, 3);
+
+        app.zoom_centered(2.0);
+        assert_eq!(app.zoom, 7.0);
+        assert_eq!(app.pan, vec2(240.0, -90.0));
+    }
+
+    #[test]
+    fn toolbar_shrinks_only_when_the_window_is_too_narrow() {
+        assert_eq!(toolbar_scale(1000.0), 1.0);
+        assert!(toolbar_scale(480.0) < 1.0);
+        assert!(super::TOOLBAR_WIDTH * toolbar_scale(480.0) <= 480.0 - 24.0);
+    }
+
+    #[test]
+    fn animated_gifs_decode_every_frame_with_browser_style_delays() {
+        use image::{Delay, Frame, Rgba, RgbaImage, codecs::gif::GifEncoder};
+
+        let path =
+            std::env::temp_dir().join(format!("spectral-viewer-anim-{}.gif", std::process::id()));
+        {
+            let mut encoder = GifEncoder::new(fs::File::create(&path).unwrap());
+            for (color, delay_ms) in [([255, 0, 0, 255], 0), ([0, 0, 255, 255], 250)] {
+                let pixels = RgbaImage::from_pixel(4, 3, Rgba(color));
+                encoder
+                    .encode_frame(Frame::from_parts(
+                        pixels,
+                        0,
+                        0,
+                        Delay::from_numer_denom_ms(delay_ms, 1),
+                    ))
+                    .unwrap();
+            }
+        }
+
+        let decoded = super::load_color_image(&path).unwrap();
+        fs::remove_file(&path).unwrap();
+
+        assert_eq!(decoded.frames.len(), 2);
+        assert_eq!(decoded.size, vec2(4.0, 3.0));
+        assert_eq!(decoded.frames[0].delay, super::DEFAULT_FRAME_DELAY);
+        assert_eq!(decoded.frames[1].delay.as_millis(), 250);
+        assert_eq!(
+            decoded.frames[1].image.pixels[0],
+            Color32::from_rgb(0, 0, 255)
+        );
+        assert_eq!(decoded.metadata.format, "GIF (2 frames)");
     }
 
     #[test]
@@ -1455,7 +1786,7 @@ mod tests {
     fn image_cache_evicts_the_least_recently_used_entry() {
         let mut cache = ImageCache::default();
         let decoded = || DecodedImage {
-            pixels: Arc::new(ColorImage::new([1, 1], vec![Color32::WHITE])),
+            frames: still_frame(ColorImage::new([1, 1], vec![Color32::WHITE])),
             size: vec2(1.0, 1.0),
             bytes: 4,
             metadata: super::ImageMetadata {
